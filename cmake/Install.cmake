@@ -40,6 +40,24 @@ endif ()
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin" AND OSX_FRAMEWORK)
     set(IIO_TESTS_INSTALL_DIR ${OSX_INSTALL_FRAMEWORKSDIR}/iio.framework/Tools)
 
+    # The tools are installed inside the framework, which is not in the PATH.
+    # Link them from a regular bin directory so they can be run from anywhere.
+    set(OSX_TOOLS_LINK_DIR
+        "${CMAKE_INSTALL_BINDIR}"
+        CACHE
+            STRING
+            "Directory where links to the iio tools are created, relative to CMAKE_INSTALL_PREFIX if not absolute (empty to disable)"
+    )
+    if (OSX_TOOLS_LINK_DIR)
+        if (IS_ABSOLUTE "${OSX_TOOLS_LINK_DIR}")
+            set(OSX_TOOLS_LINK_DIR_FULL "${OSX_TOOLS_LINK_DIR}")
+        else ()
+            get_filename_component(
+                OSX_TOOLS_LINK_DIR_FULL
+                "${CMAKE_INSTALL_PREFIX}/${OSX_TOOLS_LINK_DIR}" ABSOLUTE)
+        endif ()
+    endif ()
+
     add_custom_command(
         TARGET iio-compat
         POST_BUILD
@@ -86,6 +104,34 @@ if (NOT SKIP_INSTALL_ALL)
         endforeach ()
         install(PROGRAMS ${IIO_TEST_PROGRAMS}
                 DESTINATION ${IIO_TESTS_INSTALL_DIR})
+
+        if (OSX_TOOLS_LINK_DIR_FULL)
+            # Relative links, so that the result can be relocated or packaged
+            get_filename_component(
+                _tools_dir "${CMAKE_INSTALL_PREFIX}/${IIO_TESTS_INSTALL_DIR}"
+                ABSOLUTE)
+            file(RELATIVE_PATH _tools_rel "${OSX_TOOLS_LINK_DIR_FULL}"
+                 "${_tools_dir}")
+            install(
+                CODE "
+                set(_link_dir \"\$ENV{DESTDIR}${OSX_TOOLS_LINK_DIR_FULL}\")
+                file(MAKE_DIRECTORY \"\${_link_dir}\")
+                foreach (_tool ${IIO_UTILS_TARGETS})
+                    message(STATUS \"Installing: \${_link_dir}/\${_tool}\")
+                    execute_process(COMMAND \"${CMAKE_COMMAND}\" -E remove -f
+                                            \"\${_link_dir}/\${_tool}\")
+                    execute_process(
+                        COMMAND \"${CMAKE_COMMAND}\" -E create_symlink
+                                \"${_tools_rel}/\${_tool}\" \"\${_link_dir}/\${_tool}\"
+                        RESULT_VARIABLE _res)
+                    if (NOT _res EQUAL 0)
+                        message(FATAL_ERROR \"Unable to create \${_link_dir}/\${_tool}\")
+                    endif ()
+                    list(APPEND CMAKE_INSTALL_MANIFEST_FILES
+                         \"${OSX_TOOLS_LINK_DIR_FULL}/\${_tool}\")
+                endforeach ()
+                ")
+        endif ()
     endif ()
 endif ()
 
@@ -122,6 +168,28 @@ if (OSX_PACKAGE)
             ${LIBIIO_FRAMEWORK_DIR}/Tools)
     endforeach ()
 
+    # postinstall script run by the installer, to link the tools into the PATH
+    set(PKGBUILD_SCRIPTS_ARGS)
+    set(LIBIIO_PKG_POSTINSTALL)
+    if (OSX_TOOLS_LINK_DIR_FULL)
+        set(LIBIIO_PKG_SCRIPTS_DIR ${CMAKE_CURRENT_BINARY_DIR}/pkg-scripts)
+        set(LIBIIO_PKG_POSTINSTALL ${LIBIIO_PKG_SCRIPTS_DIR}/postinstall)
+        configure_file(cmake/macos-postinstall.sh.cmakein
+                       ${CMAKE_CURRENT_BINARY_DIR}/postinstall @ONLY)
+        file(
+            COPY ${CMAKE_CURRENT_BINARY_DIR}/postinstall
+            DESTINATION ${LIBIIO_PKG_SCRIPTS_DIR}
+            FILE_PERMISSIONS
+                OWNER_READ
+                OWNER_WRITE
+                OWNER_EXECUTE
+                GROUP_READ
+                GROUP_EXECUTE
+                WORLD_READ
+                WORLD_EXECUTE)
+        set(PKGBUILD_SCRIPTS_ARGS --scripts ${LIBIIO_PKG_SCRIPTS_DIR})
+    endif ()
+
     add_custom_command(
         OUTPUT ${LIBIIO_PKG}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBIIO_FRAMEWORK_DIR}/Tools
@@ -129,18 +197,29 @@ if (OSX_PACKAGE)
         COMMAND
             ${PKGBUILD_EXECUTABLE} --component ${LIBIIO_FRAMEWORK_DIR}
             --identifier com.adi.iio --version ${VERSION} --install-location
-            ${OSX_INSTALL_FRAMEWORKSDIR} ${LIBIIO_TEMP_PKG}
+            ${OSX_INSTALL_FRAMEWORKSDIR} ${PKGBUILD_SCRIPTS_ARGS}
+            ${LIBIIO_TEMP_PKG}
         COMMAND ${PRODUCTBUILD_EXECUTABLE} --distribution
                 ${LIBIIO_DISTRIBUTION_XML} ${LIBIIO_PKG}
         COMMAND ${CMAKE_COMMAND} -E remove ${LIBIIO_TEMP_PKG}
-        DEPENDS iio ${IIO_UTILS_TARGETS} ${LIBIIO_DISTRIBUTION_XML})
+        DEPENDS iio ${IIO_UTILS_TARGETS} ${LIBIIO_DISTRIBUTION_XML}
+                ${LIBIIO_PKG_POSTINSTALL})
 
     if (PKGBUILD_EXECUTABLE AND PRODUCTBUILD_EXECUTABLE)
         add_custom_target(libiio-pkg ALL DEPENDS ${LIBIIO_PKG})
 
+        # Installing the package requires root; fail loudly instead of
+        # reporting a successful install that didn't happen.
         install(
-            CODE "execute_process(COMMAND /usr/sbin/installer -pkg ${LIBIIO_PKG} -target /)"
-        )
+            CODE "
+            message(STATUS \"Installing: ${LIBIIO_PKG}\")
+            execute_process(
+                COMMAND /usr/sbin/installer -pkg \"${LIBIIO_PKG}\" -target /
+                RESULT_VARIABLE _res)
+            if (NOT _res EQUAL 0)
+                message(FATAL_ERROR \"Failed to install ${LIBIIO_PKG} (did you run 'sudo make install'?)\")
+            endif ()
+            ")
     else ()
         message(
             WARNING
