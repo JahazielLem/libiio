@@ -13,9 +13,15 @@ if (PTHREAD_LIBRARIES OR ANDROID)
 endif ()
 
 if (APPLE)
-    # Add relative rpath to iio library (which is in the same framework)
-    set(CMAKE_INSTALL_RPATH "@executable_path/../..")
-    set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+    if (OSX_FRAMEWORK)
+        # Tools live in iio.framework/Tools; the library is in the same
+        # framework. dyld resolves symlinks to the executable, so this also
+        # works when the tools are run through a link in a bin directory.
+        set(CMAKE_INSTALL_RPATH "@executable_path/../..")
+        set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+    else ()
+        set(CMAKE_INSTALL_RPATH "@executable_path/../${CMAKE_INSTALL_LIBDIR}")
+    endif ()
 endif ()
 
 if (WIN32)

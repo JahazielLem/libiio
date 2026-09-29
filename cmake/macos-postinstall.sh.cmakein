@@ -1,0 +1,22 @@
+#!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# postinstall script of the libiio macOS package: the tools are installed
+# inside iio.framework, which is not in the PATH, so link them from a
+# regular bin directory.
+#
+# $3 is the target volume of the installation.
+
+target="${3%/}"
+tools_dir="${target}@OSX_INSTALL_FRAMEWORKSDIR@/iio.framework/Tools"
+link_dir="${target}@OSX_TOOLS_LINK_DIR_FULL@"
+
+mkdir -p "${link_dir}" || exit 1
+
+for tool in "${tools_dir}"/*; do
+	[ -f "${tool}" ] || continue
+	ln -sfn "@OSX_INSTALL_FRAMEWORKSDIR@/iio.framework/Tools/$(basename "${tool}")" \
+		"${link_dir}/$(basename "${tool}")" || exit 1
+done
+
+exit 0

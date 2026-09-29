@@ -193,6 +193,7 @@ Cmake Options          | Default | Target | Description                         
 `WITH_GCOV`            | OFF |      Linux | Build with gcov profiling flags |
 `OSX_FRAMEWORK`        |  ON |        Mac | OS X frameworks provide the interfaces you need to write software for Mac. |
 `OSX_PACKAGE`          |  ON |        Mac | Create a OSX package for installation on local and other machines |
+`OSX_TOOLS_LINK_DIR`   | bin |        Mac | Where links to the iio tools (which live inside the framework) are created, so they are in the PATH. Relative to `CMAKE_INSTALL_PREFIX` (/usr/local on Mac); empty to disable |
 
 Which backends the library supports is dependent on the build system, but can be overridden.
 (If cmake finds libusb, it will use it, unless turned off manually)

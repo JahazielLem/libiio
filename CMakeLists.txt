@@ -14,8 +14,13 @@ project(
 
 include(cmake/Utilities.cmake)
 
-# Set the default install path to /usr
-if (NOT WIN32 AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+# Set the default install path to /usr, or /usr/local on macOS where /usr is
+# read-only (System Integrity Protection)
+if (APPLE AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX
+        "/usr/local"
+        CACHE PATH "default install path" FORCE)
+elseif (NOT WIN32 AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX
         "/usr"
         CACHE PATH "default install path" FORCE)

@@ -162,6 +162,7 @@ Cmake Options          | Default | Target | Description                         
 `WITH_GCOV`            | OFF |      Linux | Build with gcov profiling flags. Generates coverage report if TESTS enabled |
 `OSX_FRAMEWORK`        |  ON |        Mac | OS X frameworks provide the interfaces you need to write software for Mac. |
 `OSX_PACKAGE`          |  ON |        Mac | Create a OSX package for installation on local and other machines |
+`OSX_TOOLS_LINK_DIR`   | bin |        Mac | Where links to the iio tools (which live inside the framework) are created, so they are in the PATH. Relative to `CMAKE_INSTALL_PREFIX` (/usr/local on Mac); empty to disable |
 `WITH_TESTS`           | OFF |        All | Build tests and enable tests targets |
 `TESTS_DEBUG`          | OFF |        All | Build tests with debug outputs |
 
